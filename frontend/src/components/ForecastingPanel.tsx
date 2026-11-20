@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { TelemetryData, ForecastPrediction } from '../types';
+import { TrendingUp, BarChart2, ShieldAlert, Cpu, Activity, Clock, Layers } from 'lucide-react';
 
 interface ForecastingPanelProps {
   tenantId: string;
@@ -17,7 +18,6 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
   useEffect(() => {
     if (!telemetry) return;
     setHistory((prev) => {
-      // Avoid duplicate consecutive identical timestamps
       if (prev.length > 0 && prev[prev.length - 1].timestamp === telemetry.timestamp) {
         return prev;
       }
@@ -64,6 +64,7 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
     const upperCpu = Math.min(100, Math.round((predCpu + 6.2) * 10) / 10);
 
     return {
+      currentCpu,
       predicted_cpu: predCpu,
       lower_cpu: lowerCpu,
       upper_cpu: upperCpu,
@@ -72,6 +73,12 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
       risk_score: config.risk,
       confidence: config.conf,
       trend: predCpu > currentCpu ? 'increasing' : 'stable',
+      allHorizons: {
+        'current': currentCpu,
+        '15m': Math.min(100, Math.round(currentCpu * 1.05 * 10) / 10),
+        '30m': Math.min(100, Math.round(currentCpu * 1.12 * 10) / 10),
+        '60m': Math.min(100, Math.round(currentCpu * 1.25 * 10) / 10),
+      }
     };
   }, [telemetry, horizon]);
 
@@ -135,7 +142,7 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
               <button
                 key={h}
                 onClick={() => setHorizon(h)}
-                className={`px-3 py-1.5 rounded-md font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-md font-medium transition-all cursor-pointer ${
                   horizon === h
                     ? 'bg-cyan-600 text-white shadow'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -147,7 +154,7 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
           </div>
         </div>
 
-        {/* Live Hardware Gauges */}
+        {/* Live Hardware Gauges with Progress Bars */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-5">
           <div className="bg-slate-950/70 p-4 rounded-lg border border-slate-800/80">
             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
@@ -189,8 +196,11 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
             <div className="text-2xl font-bold font-mono text-emerald-300">
               {telemetry ? `${telemetry.ping_latency_ms.toFixed(1)} ms` : '--'}
             </div>
-            <div className="text-[11px] text-slate-500 mt-1 font-mono">
-              RTT to edge gateway
+            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+              <div
+                className="bg-emerald-400 h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, (telemetry?.ping_latency_ms || 20) * 2)}%` }}
+              />
             </div>
           </div>
 
@@ -202,16 +212,20 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
             <div className="text-2xl font-bold font-mono text-slate-200">
               {history.length} <span className="text-sm font-normal text-slate-500">/ 30 pts</span>
             </div>
-            <div className="text-[11px] text-slate-500 mt-1">
-              Window: ~45s continuous
+            <div className="w-full bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
+              <div
+                className="bg-indigo-400 h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, (history.length / 30) * 100)}%` }}
+              />
             </div>
           </div>
         </div>
 
-        {/* Live Rolling Polyline Visualizer */}
+        {/* Live Rolling Polyline Visualizer (Graph representation) */}
         <div className="mt-5 bg-slate-950/90 rounded-lg p-4 border border-slate-800">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
               Real-time Hardware Telemetry Curve (Last 30 ticks)
             </div>
             <div className="flex items-center gap-4 text-xs font-mono">
@@ -262,23 +276,122 @@ export const ForecastingPanel: React.FC<ForecastingPanelProps> = ({ tenantId, te
         </div>
       </div>
 
-      {/* Dynamic Forecast Predictions Card */}
+      {/* NEW: Horizon Comparative Load Bar Chart */}
       <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-lg backdrop-blur">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-2">
           <div>
-            <h3 className="text-base font-semibold text-slate-100 flex items-center gap-2">
-              <span>Predictive Horizon Forecast ({horizon})</span>
-              <span className="text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
-                Confidence {(liveForecast.confidence * 100).toFixed(0)}%
-              </span>
+            <h3 className="text-sm font-semibold text-slate-100 flex items-center gap-2">
+              <BarChart2 className="w-4 h-4 text-cyan-400" />
+              Predictive Horizon Comparative Bar Analysis
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Continuously calibrated against live hardware metrics & time-series autoregression
+            <p className="text-xs text-slate-400">
+              Projected load trajectory compared across 15-minute, 30-minute, and 60-minute forecast windows
             </p>
+          </div>
+          <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono">
+            Confidence {(liveForecast.confidence * 100).toFixed(0)}%
+          </span>
+        </div>
+
+        {/* 4 Comparative Vertical/Horizontal Bars */}
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-5">
+          {/* Current */}
+          <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>Current Baseline</span>
+                <span className="text-cyan-400 font-mono text-[10px]">NOW</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-cyan-300">
+                {liveForecast.allHorizons.current.toFixed(1)}%
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-cyan-400 h-full rounded-full"
+                  style={{ width: `${Math.min(100, liveForecast.allHorizons.current)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono block mt-1">Host telemetry stream</span>
+            </div>
+          </div>
+
+          {/* 15m Horizon */}
+          <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+            horizon === '15m' ? 'bg-cyan-950/30 border-cyan-700/60 shadow' : 'bg-slate-950/70 border-slate-800'
+          }`}>
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>15m Forecast</span>
+                <span className="text-cyan-400 font-mono text-[10px]">Conf: 94%</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-cyan-400">
+                {liveForecast.allHorizons['15m'].toFixed(1)}%
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-cyan-500 h-full rounded-full"
+                  style={{ width: `${Math.min(100, liveForecast.allHorizons['15m'])}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono block mt-1">+5% projected variance</span>
+            </div>
+          </div>
+
+          {/* 30m Horizon */}
+          <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+            horizon === '30m' ? 'bg-cyan-950/30 border-cyan-700/60 shadow' : 'bg-slate-950/70 border-slate-800'
+          }`}>
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>30m Forecast</span>
+                <span className="text-cyan-400 font-mono text-[10px]">Conf: 89%</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-cyan-400">
+                {liveForecast.allHorizons['30m'].toFixed(1)}%
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-cyan-500 h-full rounded-full"
+                  style={{ width: `${Math.min(100, liveForecast.allHorizons['30m'])}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono block mt-1">+12% projected variance</span>
+            </div>
+          </div>
+
+          {/* 60m Horizon */}
+          <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+            horizon === '60m' ? 'bg-cyan-950/30 border-cyan-700/60 shadow' : 'bg-slate-950/70 border-slate-800'
+          }`}>
+            <div>
+              <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                <span>60m Forecast</span>
+                <span className="text-cyan-400 font-mono text-[10px]">Conf: 81%</span>
+              </div>
+              <div className="text-2xl font-bold font-mono text-cyan-400">
+                {liveForecast.allHorizons['60m'].toFixed(1)}%
+              </div>
+            </div>
+            <div className="mt-3">
+              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-cyan-500 h-full rounded-full"
+                  style={{ width: `${Math.min(100, liveForecast.allHorizons['60m'])}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono block mt-1">+25% projected variance</span>
+            </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+        {/* Dynamic Forecast Predictions Row */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-5">
           <div className="p-4 rounded-lg bg-slate-950/70 border border-slate-800">
             <span className="text-xs text-slate-400">Forecasted CPU ({horizon})</span>
             <div className="text-2xl font-bold font-mono text-cyan-400 mt-1">

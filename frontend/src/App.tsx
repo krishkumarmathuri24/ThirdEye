@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { NavigationSidebar } from './components/NavigationSidebar';
 import { NavigationHeader } from './components/NavigationHeader';
 import { TrustDashboard } from './components/TrustDashboard';
 import { PrivacyTransparencyCenter } from './components/PrivacyTransparencyCenter';
@@ -20,12 +21,17 @@ import { realtimeService } from './services/realtime';
 export default function App() {
   const queryParams = new URLSearchParams(window.location.search);
   const urlTenant = queryParams.get('tenant') || 'tenant_prod_us_east_1';
-  const embedMode = queryParams.get('mode') === 'embed' || queryParams.get('mode') === 'widget' || window.location.pathname.startsWith('/embed');
+  const embedMode =
+    queryParams.get('mode') === 'embed' ||
+    queryParams.get('mode') === 'widget' ||
+    window.location.pathname.startsWith('/embed');
   const embedTheme = (queryParams.get('theme') as 'dark' | 'light') || 'dark';
 
-  const [activeTab, setActiveTab] = useState('trust');
+  // Open SaaS overview landing page first by default
+  const [activeTab, setActiveTab] = useState('landing');
   const [tenantId, setTenantId] = useState(urlTenant);
   const [isConnected, setIsConnected] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   // Live state
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
@@ -42,7 +48,7 @@ export default function App() {
         api.getTrustScores(tenantId).catch(() => null),
         api.getHealth(tenantId).catch(() => null),
         api.getSecurity(tenantId).catch(() => null),
-        api.getIncidents(tenantId, 'active').catch(() => [])
+        api.getIncidents(tenantId, 'active').catch(() => []),
       ]);
 
       if (t) setTelemetry(t);
@@ -62,7 +68,7 @@ export default function App() {
     realtimeService.connect(tenantId);
     setIsConnected(true);
 
-    // Subscribe to all 11 real-time channels
+    // Subscribe to real-time channels
     const unsubTelemetry = realtimeService.subscribe('telemetry_updates', (data: TelemetryData) => {
       setTelemetry(data);
     });
@@ -105,16 +111,17 @@ export default function App() {
     );
   }
 
-  // If active tab is SaaS landing overview, render the requested UI component
+  // If active tab is SaaS landing overview, render the SaaS landing overview first
   if (activeTab === 'landing') {
     return (
       <div className="relative">
         <div className="fixed top-20 right-6 z-50">
           <button
             onClick={() => setActiveTab('trust')}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 text-white font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2 border border-white/20"
           >
-            ← Back to Live AIOps Console
+            <span>Launch Live Console</span>
+            <span>→</span>
           </button>
         </div>
         <Demo onLaunchApp={() => setActiveTab('trust')} />
@@ -123,75 +130,91 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070b14] text-slate-100 flex flex-col font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
-      {/* Top Navbar */}
-      <NavigationHeader
+    <div className="min-h-screen bg-[#070b14] text-slate-100 flex font-sans selection:bg-indigo-500/30 selection:text-indigo-200">
+      {/* Vertical Navigation Sidebar */}
+      <NavigationSidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         tenantId={tenantId}
         setTenantId={setTenantId}
         isConnected={isConnected}
         activeIncidentsCount={activeIncidentsCount}
+        mobileOpen={mobileOpen}
+        setMobileOpen={setMobileOpen}
       />
 
-      {/* Main Workspace View */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
-        {activeTab === 'trust' && (
-          <TrustDashboard
-            scores={trustScores}
-            telemetry={telemetry}
-            health={health}
-            security={security}
-            onNavigateTab={setActiveTab}
-          />
-        )}
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-y-auto">
+        {/* Top Navbar Header */}
+        <NavigationHeader
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          tenantId={tenantId}
+          setTenantId={setTenantId}
+          isConnected={isConnected}
+          activeIncidentsCount={activeIncidentsCount}
+          onToggleMobileMenu={() => setMobileOpen(!mobileOpen)}
+        />
 
-        {activeTab === 'privacy' && (
-          <PrivacyTransparencyCenter tenantId={tenantId} />
-        )}
+        {/* Main Workspace View */}
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">
+          {activeTab === 'trust' && (
+            <TrustDashboard
+              scores={trustScores}
+              telemetry={telemetry}
+              health={health}
+              security={security}
+              onNavigateTab={setActiveTab}
+            />
+          )}
 
-        {activeTab === 'egress' && (
-          <EgressProofPanel tenantId={tenantId} />
-        )}
+          {activeTab === 'privacy' && (
+            <PrivacyTransparencyCenter tenantId={tenantId} />
+          )}
 
-        {activeTab === 'incidents' && (
-          <IncidentCenter tenantId={tenantId} />
-        )}
+          {activeTab === 'egress' && (
+            <EgressProofPanel tenantId={tenantId} />
+          )}
 
-        {activeTab === 'telemetry' && (
-          <ForecastingPanel tenantId={tenantId} telemetry={telemetry} />
-        )}
+          {activeTab === 'incidents' && (
+            <IncidentCenter tenantId={tenantId} />
+          )}
 
-        {activeTab === 'remediation' && (
-          <SafeRemediationHub tenantId={tenantId} />
-        )}
+          {activeTab === 'telemetry' && (
+            <ForecastingPanel tenantId={tenantId} telemetry={telemetry} />
+          )}
 
-        {activeTab === 'scenarios' && (
-          <LiveScenarioController
-            tenantId={tenantId}
-            onScenarioTriggered={() => {
-              fetchAllData();
-            }}
-          />
-        )}
+          {activeTab === 'remediation' && (
+            <SafeRemediationHub tenantId={tenantId} />
+          )}
 
-        {activeTab === 'copilot' && (
-          <InfrastructureCopilot tenantId={tenantId} />
-        )}
+          {activeTab === 'scenarios' && (
+            <LiveScenarioController
+              tenantId={tenantId}
+              onScenarioTriggered={() => {
+                fetchAllData();
+              }}
+            />
+          )}
 
-        {activeTab === 'audit' && (
-          <AuditLogViewer tenantId={tenantId} />
-        )}
+          {activeTab === 'copilot' && (
+            <InfrastructureCopilot tenantId={tenantId} />
+          )}
 
-        {activeTab === 'integrate' && (
-          <WebsiteIntegrationHub tenantId={tenantId} />
-        )}
-      </main>
+          {activeTab === 'audit' && (
+            <AuditLogViewer tenantId={tenantId} />
+          )}
 
-      {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500 font-mono">
-        Third Eye • Privacy-First Real-Time AIOps Observability Platform • Zero Raw Data SaaS Architecture
-      </footer>
+          {activeTab === 'integrate' && (
+            <WebsiteIntegrationHub tenantId={tenantId} />
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="border-t border-slate-900 bg-slate-950/80 py-4 px-6 text-center text-xs text-slate-500 font-mono">
+          Third Eye • Privacy-First Real-Time AIOps Observability Platform • Zero Raw Data SaaS Architecture
+        </footer>
+      </div>
     </div>
   );
 }
