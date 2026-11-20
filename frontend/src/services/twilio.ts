@@ -1,11 +1,6 @@
-export interface TwilioConfig {
-  accountSid: string;
-  authToken: string;
-  phoneNumber: string; // Twilio phone number or Sandbox number
-  recipientNumber: string; // User's mobile number
-  channel: 'whatsapp' | 'sms' | 'both';
-  enabled: boolean;
-}
+// ThirdEye AIOps — Silent Twilio Notification Service
+// Credentials are stored ONLY in Vercel environment variables (TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN,
+// TWILIO_TO_NUMBER, TWILIO_PHONE_NUMBER). No credentials are stored or read from the browser.
 
 export interface TwilioAlertRecord {
   id: string;
@@ -25,23 +20,13 @@ export interface TwilioAlertRecord {
 
 type AlertListener = (alert: TwilioAlertRecord) => void;
 
-const STORAGE_KEY = 'thirdeye_twilio_config';
 const HISTORY_KEY = 'thirdeye_twilio_history';
 
 class TwilioNotificationService {
-  private config: TwilioConfig = {
-    accountSid: '',
-    authToken: '',
-    phoneNumber: '+14155238886', // Twilio WhatsApp Sandbox default
-    recipientNumber: '',
-    channel: 'both',
-    enabled: true,
-  };
-
   private history: TwilioAlertRecord[] = [];
   private listeners: Set<AlertListener> = new Set();
 
-  // Cooldown timers for automatic >=90% thresholds (60s cooldown per metric)
+  // 60-second cooldown per metric to avoid alert storms
   private lastAlertTimes: Record<string, number> = {
     cpu: 0,
     memory: 0,
@@ -50,46 +35,18 @@ class TwilioNotificationService {
   };
 
   constructor() {
-    this.loadConfig();
     this.loadHistory();
   }
 
-  public loadConfig(): TwilioConfig {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        this.config = { ...this.config, ...JSON.parse(saved) };
-      }
-    } catch {
-      // Ignore
-    }
-    return this.config;
-  }
-
-  public saveConfig(newConfig: Partial<TwilioConfig>): TwilioConfig {
-    this.config = { ...this.config, ...newConfig };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.config));
-    } catch {
-      // Ignore
-    }
-    return this.config;
-  }
-
-  public getConfig(): TwilioConfig {
-    return { ...this.config };
-  }
-
-  public loadHistory(): TwilioAlertRecord[] {
+  private loadHistory(): void {
     try {
       const saved = localStorage.getItem(HISTORY_KEY);
       if (saved) {
         this.history = JSON.parse(saved);
       }
     } catch {
-      // Ignore
+      // Ignore parse errors
     }
-    return this.history;
   }
 
   public getHistory(): TwilioAlertRecord[] {
@@ -106,13 +63,15 @@ class TwilioNotificationService {
       try {
         cb(alert);
       } catch (err) {
-        console.error('Error in Twilio alert listener:', err);
+        console.error('[Twilio] Error in alert listener:', err);
       }
     });
   }
 
   /**
-   * Dispatches a structured alert message via WhatsApp, SMS, or Both
+   * Dispatches a structured alert via the Vercel serverless function /api/notify.
+   * Credentials are read exclusively from Vercel environment variables on the server.
+   * No credentials are passed from the browser.
    */
   public async dispatchAlert(params: {
     title: string;
@@ -128,12 +87,14 @@ class TwilioNotificationService {
     const timestamp = new Date().toISOString();
     const timeFormatted = new Date().toLocaleTimeString();
 
-    // Format professional WhatsApp/SMS alert
-    const message = [
+    // Professional alert message
+    const messageParts = [
       `🚨 [THIRDEYE AIOPS ${severity.toUpperCase()}]`,
-      `━━━━━━━━━━━━━━━━━━━━━━`,
+      `──────────────────────`,
       `Event: ${params.title}`,
-      params.metric && params.value ? `Metric: ${params.metric} = ${params.value} (Threshold >= 90%)` : null,
+      params.metric && params.value
+        ? `Metric: ${params.metric} = ${params.value} (Threshold >= 90%)`
+        : null,
       `Tenant: ${tenant} | Time: ${timeFormatted}`,
       ``,
       `⚠️ Trigger & Root Cause:`,
@@ -142,7 +103,7 @@ class TwilioNotificationService {
       `🛡️ How to Prevent & Remediate:`,
       ...params.preventionSteps.map((step, idx) => `${idx + 1}. ${step}`),
       ``,
-      `Console: https://third-eye-eta.vercel.app/`
+      `Console: https://third-eye-eta.vercel.app/`,
     ]
       .filter((line) => line !== null)
       .join('\n');
@@ -150,19 +111,14 @@ class TwilioNotificationService {
     let status: 'sent' | 'simulated' | 'error' = 'simulated';
     let responseData: any = null;
 
-    // Send via Vercel serverless function or direct backend
     try {
-      const endpoint = '/api/notify';
-      const res = await fetch(endpoint, {
+      // POST only the message — credentials come from server-side env vars
+      const res = await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accountSid: this.config.accountSid,
-          authToken: this.config.authToken,
-          from: this.config.phoneNumber || '+14155238886',
-          to: this.config.recipientNumber,
-          channel: this.config.channel,
-          message: message,
+          message: messageParts,
+          channel: 'both',
         }),
       });
 
@@ -175,7 +131,7 @@ class TwilioNotificationService {
         }
       }
     } catch (err) {
-      console.warn('[Twilio] Notification dispatch network notice:', err);
+      console.warn('[Twilio] Dispatch network error:', err);
       status = 'simulated';
     }
 
@@ -188,14 +144,14 @@ class TwilioNotificationService {
       value: params.value,
       triggerCause: params.triggerCause,
       preventionSteps: params.preventionSteps,
-      channel: this.config.channel,
+      channel: 'both',
       status,
-      recipient: this.config.recipientNumber || 'Not Configured (Preview Mode)',
-      messagePreview: message,
+      recipient: responseData?.recipient || 'Configured via Vercel env',
+      messagePreview: messageParts,
       details: responseData,
     };
 
-    // Prepend to history (keep last 30)
+    // Keep last 30 alerts in localStorage history
     this.history = [record, ...this.history.slice(0, 29)];
     try {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(this.history));
@@ -209,7 +165,8 @@ class TwilioNotificationService {
 
   /**
    * Real-time Threshold Watchdog:
-   * Called every time telemetry updates. If CPU, Memory, or Disk >= 90%, automatically triggers alerts!
+   * Called on every telemetry update. Automatically fires WhatsApp + SMS
+   * alerts if CPU, Memory, or Disk >= 90%. 60-second cooldown per metric.
    */
   public checkThresholdBreach(telemetry: {
     cpu_percent: number;
@@ -217,13 +174,14 @@ class TwilioNotificationService {
     disk_percent?: number;
     tenant_id?: string;
   }) {
-    if (!this.config.enabled) return;
-
     const now = Date.now();
-    const COOLDOWN_MS = 60000; // 60 seconds debounce per metric
+    const COOLDOWN_MS = 60_000; // 60 seconds debounce per metric
 
-    // 1. Check CPU >= 90%
-    if (telemetry.cpu_percent >= 90.0 && now - this.lastAlertTimes.cpu > COOLDOWN_MS) {
+    // CPU >= 90%
+    if (
+      telemetry.cpu_percent >= 90.0 &&
+      now - this.lastAlertTimes.cpu > COOLDOWN_MS
+    ) {
       this.lastAlertTimes.cpu = now;
       this.dispatchAlert({
         title: 'CPU Core Load Critical Breach',
@@ -235,14 +193,17 @@ class TwilioNotificationService {
         preventionSteps: [
           'Apply gateway ingress rate-limiting on /api/v1/auth (100 req/s ceiling)',
           'Auto-scale worker replica pool from current tier to +4 pods',
-          'Evict long-running unbuffered worker thread PIDs'
+          'Evict long-running unbuffered worker thread PIDs',
         ],
         tenantId: telemetry.tenant_id,
       });
     }
 
-    // 2. Check Memory >= 90%
-    if (telemetry.memory_percent >= 90.0 && now - this.lastAlertTimes.memory > COOLDOWN_MS) {
+    // Memory >= 90%
+    if (
+      telemetry.memory_percent >= 90.0 &&
+      now - this.lastAlertTimes.memory > COOLDOWN_MS
+    ) {
       this.lastAlertTimes.memory = now;
       this.dispatchAlert({
         title: 'Memory Utilization Critical Breach',
@@ -254,13 +215,13 @@ class TwilioNotificationService {
         preventionSteps: [
           'Force garbage collection flush and evict stale in-memory cache rows',
           'Gracefully restart leaking worker pod instances to release heap',
-          'Increase container cgroup memory limit ceiling by 2GB'
+          'Increase container cgroup memory limit ceiling by 2GB',
         ],
         tenantId: telemetry.tenant_id,
       });
     }
 
-    // 3. Check Disk >= 90%
+    // Disk >= 90%
     if (
       typeof telemetry.disk_percent === 'number' &&
       telemetry.disk_percent >= 90.0 &&
@@ -277,7 +238,7 @@ class TwilioNotificationService {
         preventionSteps: [
           'Trigger automatic log rotation and compress archives older than 72 hours',
           'Flush delivered outbox rows from local SQLite buffer',
-          'Expand persistent cloud NVMe volume by 50GB'
+          'Expand persistent cloud NVMe volume by 50GB',
         ],
         tenantId: telemetry.tenant_id,
       });
