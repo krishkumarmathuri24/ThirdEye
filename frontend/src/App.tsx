@@ -17,6 +17,7 @@ import { WebsiteIntegrationHub } from './components/WebsiteIntegrationHub';
 import { TelemetryData, TrustScores, HealthState, SecurityState } from './types';
 import { api } from './services/api';
 import { realtimeService } from './services/realtime';
+import { twilioService, TwilioAlertRecord } from './services/twilio';
 
 export default function App() {
   const queryParams = new URLSearchParams(window.location.search);
@@ -32,6 +33,7 @@ export default function App() {
   const [tenantId, setTenantId] = useState(urlTenant);
   const [isConnected, setIsConnected] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [activeAlert, setActiveAlert] = useState<TwilioAlertRecord | null>(null);
 
   // Live state
   const [telemetry, setTelemetry] = useState<TelemetryData | null>(null);
@@ -71,6 +73,8 @@ export default function App() {
     // Subscribe to real-time channels
     const unsubTelemetry = realtimeService.subscribe('telemetry_updates', (data: TelemetryData) => {
       setTelemetry(data);
+      // Automatic Watchdog: if CPU, Memory, or Disk touches or exceeds 90%, automatically dispatch Twilio alerts!
+      twilioService.checkThresholdBreach(data);
     });
 
     const unsubTrust = realtimeService.subscribe('trust_updates', (data: TrustScores) => {
@@ -91,12 +95,21 @@ export default function App() {
         .catch(() => {});
     });
 
+    // Subscribe to Twilio notification broadcasts
+    const unsubAlerts = twilioService.subscribe((alert) => {
+      setActiveAlert(alert);
+      setTimeout(() => {
+        setActiveAlert((curr) => (curr?.id === alert.id ? null : curr));
+      }, 10000);
+    });
+
     return () => {
       unsubTelemetry();
       unsubTrust();
       unsubHealth();
       unsubSecurity();
       unsubIncidents();
+      unsubAlerts();
       realtimeService.disconnect();
       setIsConnected(false);
     };
@@ -155,6 +168,39 @@ export default function App() {
           activeIncidentsCount={activeIncidentsCount}
           onToggleMobileMenu={() => setMobileOpen(!mobileOpen)}
         />
+
+        {/* Real-time Twilio Notification Alert Toast Banner */}
+        {activeAlert && (
+          <div className="mx-4 md:mx-6 mt-4 p-4 rounded-xl border border-rose-500/60 bg-gradient-to-r from-rose-950/90 via-slate-900 to-rose-950/90 shadow-2xl flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="p-2 rounded-lg bg-rose-500/20 text-rose-400 font-bold text-xs uppercase font-mono border border-rose-500/30">
+                📱 Twilio {activeAlert.channel.toUpperCase()} Alert
+              </span>
+              <div>
+                <strong className="text-white text-xs block">{activeAlert.title}</strong>
+                <span className="text-[11px] text-rose-200">
+                  {activeAlert.metric ? `${activeAlert.metric}: ${activeAlert.value} • ` : ''}
+                  {activeAlert.triggerCause.slice(0, 90)}...
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setActiveTab('scenarios')}
+                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold cursor-pointer shadow transition-all"
+              >
+                Inspect Alert & Prevention →
+              </button>
+              <button
+                onClick={() => setActiveAlert(null)}
+                className="text-xs text-slate-400 hover:text-white p-1 cursor-pointer"
+                aria-label="Dismiss alert"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Main Workspace View */}
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6">

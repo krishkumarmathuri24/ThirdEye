@@ -13,6 +13,8 @@ import {
   CollectorState,
   AuditRecord
 } from '../types';
+import { twilioService } from './twilio';
+import { realtimeService } from './realtime';
 
 // In production, VITE_API_BASE_URL points to the deployed backend.
 // In dev, Vite proxy forwards /api -> localhost:8000.
@@ -41,8 +43,91 @@ async function safeFetch<T>(url: string, options?: RequestInit, fallback?: T): P
 let simCpu = 34.2;
 let simMemory = 54.0;
 let simLatency = 22.4;
+let simDisk = 42.8;
 let simErrors = 0;
 let simFailedLogins = 0;
+
+function getScenarioCause(scenarioType: string): string {
+  switch (scenarioType) {
+    case 'cpu_spike':
+      return 'Compute core thread starvation from unthrottled worker execution loops and crypto thread lock contention.';
+    case 'memory_leak':
+      return 'Heap fragmentation and linear memory growth in uncollected session cache triggering GC thrashing.';
+    case 'disk_saturation':
+      return 'Persistent storage volume filling past 99% capacity due to uncompressed archival logs and SQLite buffer backlog.';
+    case 'latency_surge':
+      return 'Network egress route degradation and transit gateway packet drop wave causing P99 latency >240ms.';
+    case 'packet_loss':
+      return 'Burst packet drop rate crossing 6.5%, triggering TCP window collapse and retransmissions.';
+    case 'db_slowdown':
+      return 'Unindexed sequential table scans holding exclusive row locks and exhausting database connection pool.';
+    case 'failed_login_flood':
+      return 'Distributed credential stuffing attack (60+ failed auth attempts) saturating crypto password verification.';
+    case 'ddos':
+      return 'Volumetric ingress wave (55,000 KB/s RX) overwhelming boundary edge routers.';
+    default:
+      return 'Operational anomaly detected crossing safety boundaries.';
+  }
+}
+
+function getScenarioPrevention(scenarioType: string): string[] {
+  switch (scenarioType) {
+    case 'cpu_spike':
+      return [
+        'Apply gateway ingress rate-limiting on /api/v1/auth (100 req/s ceiling)',
+        'Auto-scale worker container replica pool from 3 to 8 pods',
+        'Evict hung worker thread PID #4092'
+      ];
+    case 'memory_leak':
+      return [
+        'Trigger garbage collection flush and evict stale in-memory cache rows',
+        'Gracefully restart leaking worker pod instances to release heap',
+        'Increase container cgroup memory ceiling by 2GB'
+      ];
+    case 'disk_saturation':
+      return [
+        'Trigger automatic log rotation and compress archives older than 72 hours',
+        'Flush delivered outbox rows from local SQLite buffer',
+        'Expand persistent cloud NVMe volume by 50GB'
+      ];
+    case 'latency_surge':
+      return [
+        'Failover to secondary cloud egress gateway',
+        'Verify upstream DNS resolver health',
+        'Enable TCP BBR congestion control on edge interfaces'
+      ];
+    case 'packet_loss':
+      return [
+        'Reroute traffic to redundant transit provider',
+        'Adjust TCP window sizing and socket buffer allocations',
+        'Inspect interface dropped-packet counters'
+      ];
+    case 'db_slowdown':
+      return [
+        'Add composite index on query predicate',
+        'Terminate long-running blocking query PIDs',
+        'Scale PgBouncer / RDS connection pool max connections'
+      ];
+    case 'failed_login_flood':
+      return [
+        'Enable adaptive IP ban / Cloudflare Turnstile on /api/v1/auth',
+        'Enforce exponential backoff for failed logins',
+        'Isolate authentication cluster to dedicated pool'
+      ];
+    case 'ddos':
+      return [
+        'Activate Cloudflare / AWS Shield DDoS mitigation layer',
+        'Drop malformed ingress packets at border router',
+        'Scale ingress gateway pods to absorb peak traffic'
+      ];
+    default:
+      return [
+        'Inspect active telemetry metrics and alerts',
+        'Apply automated remediation proposal',
+        'Verify zero-raw privacy egress boundary'
+      ];
+  }
+}
 
 function createTelemetryObject(tenantId: string, overrides: Partial<TelemetryData> = {}): TelemetryData {
   return {
@@ -447,15 +532,126 @@ export const api = {
 
   // Scenarios
   triggerScenario: async (scenarioType: string, intensity: number = 1.0, tenantId: string): Promise<any> => {
-    // Dynamic scenario injection in client state
+    let spikeMetric = 'CPU Core Load';
+    let spikeVal = '95.4%';
+
     if (scenarioType === 'cpu_spike') {
-      simCpu = Math.min(99.0, 75.0 + intensity * 15.0);
-    } else if (scenarioType === 'failed_login_flood') {
-      simFailedLogins = Math.round(30 * intensity);
-      simCpu = Math.min(95.0, 60.0 + intensity * 20.0);
+      simCpu = Math.min(99.0, 85.0 + intensity * 10.0);
+      simLatency = 38.0;
+      spikeMetric = 'CPU Core Load';
+      spikeVal = `${simCpu.toFixed(1)}%`;
+    } else if (scenarioType === 'memory_leak') {
+      simMemory = Math.min(99.0, 92.0 + intensity * 5.0);
+      simCpu = 78.0;
+      spikeMetric = 'Memory (RAM)';
+      spikeVal = `${simMemory.toFixed(1)}%`;
+    } else if (scenarioType === 'disk_saturation') {
+      simDisk = 99.2;
+      simCpu = 74.0;
+      spikeMetric = 'Physical Disk Util';
+      spikeVal = `${simDisk.toFixed(1)}%`;
     } else if (scenarioType === 'latency_surge') {
-      simLatency = Math.round(180.0 * intensity);
+      simLatency = Math.round(240.0 * intensity);
+      simCpu = 65.0;
+      spikeMetric = 'Ping Latency';
+      spikeVal = `${simLatency} ms`;
+    } else if (scenarioType === 'packet_loss') {
+      simLatency = 210.0;
+      simErrors = 18;
+      spikeMetric = 'Packet Loss';
+      spikeVal = '7.2%';
+    } else if (scenarioType === 'db_slowdown') {
+      simLatency = 160.0;
+      simCpu = 88.5;
+      spikeMetric = 'DB Query Latency';
+      spikeVal = '160 ms';
+    } else if (scenarioType === 'failed_login_flood') {
+      simFailedLogins = Math.round(65 * intensity);
+      simCpu = Math.min(96.0, 75.0 + intensity * 18.0);
+      spikeMetric = 'Failed Logins';
+      spikeVal = `${simFailedLogins} attempts/5m`;
+    } else if (scenarioType === 'ddos') {
+      simCpu = 95.0;
+      simLatency = 220.0;
+      simErrors = 34;
+      spikeMetric = 'Ingress Traffic';
+      spikeVal = '55,000 kbps';
     }
+
+    const cause = getScenarioCause(scenarioType);
+    const prevention = getScenarioPrevention(scenarioType);
+
+    // 1. Create and prepend a real active Incident to activeIncidents!
+    const newInc: Incident = {
+      id: `inc_scenario_${Date.now().toString(16)}`,
+      tenant_id: tenantId,
+      timestamp: new Date().toISOString(),
+      title: `Critical Incident: Injected ${scenarioType.replace(/_/g, ' ').toUpperCase()}`,
+      severity: 'critical',
+      status: 'active',
+      confidence: 0.98,
+      affected_systems: ['gateway-cluster', 'auth-service', 'worker-pool'],
+      probable_cause: cause,
+      root_cause_chain: [
+        `Operator scenario injection: ${scenarioType} (${intensity}x)`,
+        `${spikeMetric} crossed critical threshold (${spikeVal})`,
+        'Automated incident correlation ticket generated with Twilio alert dispatch'
+      ],
+      explainability: {
+        summary: `Root cause identified as ${cause}`,
+        decision_confidence: 0.98,
+        primary_driving_factors: [
+          `${spikeMetric} at ${spikeVal}`,
+          'Critical threshold >=90% breached',
+          'Automated Twilio WhatsApp/SMS alert triggered'
+        ],
+        contributing_signals: [
+          { signal: 'cpu_percent', value: `${simCpu.toFixed(1)}%`, delta: '+65%', weight: 0.88 },
+          { signal: 'memory_percent', value: `${simMemory.toFixed(1)}%`, delta: '+42%', weight: 0.76 }
+        ],
+        explainability_tree: {
+          root: `Triggered Anomaly: ${scenarioType}`,
+          branches: ['Threshold Breach', 'AIOps Correlation', 'Twilio Alert Dispatched'],
+          evidence_points: ['Psutil real-time metrics', 'Cryptographic HMAC verified']
+        },
+        reasoning_narrative: `ThirdEye detected abnormal behavior resulting from ${scenarioType}. Automated Twilio notifications were dispatched with prevention guidance.`
+      },
+      timeline: [
+        {
+          timestamp: new Date().toISOString(),
+          event_title: `Scenario ${scenarioType} Injected`,
+          description: `Operator injected test failure at ${intensity}x intensity.`,
+          signal_name: scenarioType,
+          signal_value: spikeVal,
+          dimension: 'Operational',
+          severity: 'critical'
+        }
+      ]
+    };
+    activeIncidents = [newInc, ...activeIncidents];
+
+    // 2. Emit updated telemetry and incident updates to realtimeService so UI reflects instantly!
+    const injectedTelemetry = createTelemetryObject(tenantId, {
+      cpu_percent: simCpu,
+      memory_percent: simMemory,
+      disk_percent: simDisk,
+      ping_latency_ms: simLatency,
+      failed_login_count: simFailedLogins,
+      error_count: simErrors
+    });
+    realtimeService['emit']('telemetry_updates', injectedTelemetry);
+    realtimeService['emit']('incident_updates', { incident_id: newInc.id });
+
+    // 3. Dispatch Twilio WhatsApp & SMS notification!
+    const twilioAlert = await twilioService.dispatchAlert({
+      title: `Scenario Triggered: ${scenarioType.replace(/_/g, ' ').toUpperCase()}`,
+      severity: 'critical',
+      metric: spikeMetric,
+      value: spikeVal,
+      triggerCause: cause,
+      preventionSteps: prevention,
+      tenantId
+    });
 
     const res = await safeFetch<any>(`${API_BASE}/scenarios/trigger?tenant_id=${tenantId}`, {
       method: 'POST',
@@ -465,13 +661,43 @@ export const api = {
       status: 'success',
       scenario: scenarioType,
       intensity: intensity,
-      incident: {
-        id: `inc_${Date.now().toString(16)}`,
-        title: `Correlated Incident: Injected ${scenarioType.replace(/_/g, ' ')}`,
-        severity: 'high'
-      }
+      incident: newInc,
+      twilio: twilioAlert,
+      telemetry: injectedTelemetry
     });
+
     return res;
+  },
+
+  resetScenario: async (tenantId: string): Promise<any> => {
+    simCpu = 34.2;
+    simMemory = 54.0;
+    simLatency = 22.4;
+    simDisk = 42.8;
+    simFailedLogins = 0;
+    simErrors = 0;
+
+    // Resolve active scenario incidents
+    activeIncidents = activeIncidents.map((inc) =>
+      inc.id.startsWith('inc_scenario_') ? { ...inc, status: 'resolved' as const } : inc
+    );
+
+    const normalTelemetry = createTelemetryObject(tenantId, {
+      cpu_percent: simCpu,
+      memory_percent: simMemory,
+      disk_percent: simDisk,
+      ping_latency_ms: simLatency,
+      failed_login_count: 0,
+      error_count: 0
+    });
+    realtimeService['emit']('telemetry_updates', normalTelemetry);
+    realtimeService['emit']('incident_updates', { status: 'resolved' });
+
+    return {
+      status: 'recovered',
+      message: 'System recovered to nominal baseline.',
+      telemetry: normalTelemetry
+    };
   },
 
   getScenariosList: async (): Promise<any> => {
