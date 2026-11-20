@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+collector/egress_proofs.jsonl
+
+# Coverage
+htmlcov/
+.coverage
