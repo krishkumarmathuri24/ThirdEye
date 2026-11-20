@@ -10,14 +10,20 @@ import { LiveScenarioController } from './components/LiveScenarioController';
 import { InfrastructureCopilot } from './components/InfrastructureCopilot';
 import { AuditLogViewer } from './components/AuditLogViewer';
 import Demo from './components/ui/demo';
+import { ThirdEyeEmbedWidget } from './components/ThirdEyeEmbedWidget';
 
 import { TelemetryData, TrustScores, HealthState, SecurityState } from './types';
 import { api } from './services/api';
 import { realtimeService } from './services/realtime';
 
 export default function App() {
+  const queryParams = new URLSearchParams(window.location.search);
+  const urlTenant = queryParams.get('tenant') || 'tenant_prod_us_east_1';
+  const embedMode = queryParams.get('mode') === 'embed' || queryParams.get('mode') === 'widget' || window.location.pathname.startsWith('/embed');
+  const embedTheme = (queryParams.get('theme') as 'dark' | 'light') || 'dark';
+
   const [activeTab, setActiveTab] = useState('trust');
-  const [tenantId, setTenantId] = useState('tenant_prod_us_east_1');
+  const [tenantId, setTenantId] = useState(urlTenant);
   const [isConnected, setIsConnected] = useState(false);
 
   // Live state
@@ -88,6 +94,15 @@ export default function App() {
       setIsConnected(false);
     };
   }, [tenantId]);
+
+  // If embedded in external company website
+  if (embedMode) {
+    return (
+      <div className="min-h-screen bg-transparent flex items-center justify-center p-2">
+        <ThirdEyeEmbedWidget tenantId={tenantId} theme={embedTheme} />
+      </div>
+    );
+  }
 
   // If active tab is SaaS landing overview, render the requested UI component
   if (activeTab === 'landing') {

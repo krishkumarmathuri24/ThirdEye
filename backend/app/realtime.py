@@ -38,6 +38,11 @@ class SupabaseRealtimeHub:
         }
         self._http_client: Optional[httpx.AsyncClient] = None
 
+    async def get_http_client(self) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=4.0)
+        return self._http_client
+
     def _get_lock(self) -> asyncio.Lock:
         if self._lock is None:
             self._lock = asyncio.Lock()
