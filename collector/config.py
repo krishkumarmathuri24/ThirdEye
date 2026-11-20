@@ -8,6 +8,10 @@ class CollectorConfig:
     API_KEY: str = os.getenv("THIRDEYE_API_KEY", "thirdeye_live_secret_key_prod_99")
     HMAC_SECRET: str = os.getenv("THIRDEYE_HMAC_SECRET", "thirdeye_collector_salt_sec_2026")
     
+    # Direct Cloud Supabase Realtime Broadcast Bridge
+    SUPABASE_URL: str = os.getenv("SUPABASE_URL", os.getenv("VITE_SUPABASE_URL", ""))
+    SUPABASE_KEY: str = os.getenv("SUPABASE_KEY", os.getenv("VITE_SUPABASE_ANON_KEY", ""))
+    
     BUFFER_DB_PATH: str = os.path.join(os.path.dirname(__file__), "outbox.db")
     EGRESS_LOG_PATH: str = os.path.join(os.path.dirname(__file__), "egress_proofs.jsonl")
     

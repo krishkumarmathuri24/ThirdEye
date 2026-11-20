@@ -49,6 +49,11 @@ class RealtimeService {
       const topic = `realtime:${this.tenantId}:${channel}`;
       const sub = this.supabaseClient.channel(topic)
         .on('broadcast', { event: 'update' }, (payload: any) => {
+          // Clear fallback timer immediately when real Supabase cloud data arrives
+          if (this.fallbackTimer) {
+            clearInterval(this.fallbackTimer);
+            this.fallbackTimer = null;
+          }
           this.emit(channel, payload.payload?.data || payload.payload);
         })
         .subscribe();

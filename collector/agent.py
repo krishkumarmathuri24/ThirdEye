@@ -41,11 +41,45 @@ class ThirdEyeCollectorAgent:
         # 4. Enqueue in local SQLite outbox buffer
         local_buffer.enqueue(metadata_payload, self.sequence_number)
 
+        # 4b. Cloud Sync: Direct Broadcast to Supabase Realtime
+        self._broadcast_to_supabase(metadata_payload)
+
         # 5. Flush pending payloads to SaaS endpoint (Replay + Delivery)
         self._flush_outbox()
 
         # 6. Emit Heartbeat
         self._send_heartbeat()
+
+    def _broadcast_to_supabase(self, payload: Dict[str, Any]):
+        sb_url = collector_config.SUPABASE_URL
+        sb_key = collector_config.SUPABASE_KEY
+        if not sb_url or not sb_key:
+            return
+        
+        try:
+            url = f"{sb_url.rstrip('/')}/realtime/v1/api/broadcast"
+            headers = {
+                "apikey": sb_key,
+                "Authorization": f"Bearer {sb_key}",
+                "Content-Type": "application/json"
+            }
+            body = {
+                "messages": [
+                    {
+                        "topic": f"realtime:{collector_config.TENANT_ID}:telemetry_updates",
+                        "event": "update",
+                        "payload": {
+                            "channel": "telemetry_updates",
+                            "tenant_id": collector_config.TENANT_ID,
+                            "timestamp": payload.get("timestamp"),
+                            "data": payload
+                        }
+                    }
+                ]
+            }
+            self.http_client.post(url, headers=headers, json=body, timeout=2.0)
+        except Exception as e:
+            logger.debug(f"Direct Supabase broadcast: {e}")
 
     def _flush_outbox(self):
         pending = local_buffer.get_pending(limit=20)
