@@ -2,6 +2,10 @@
 
 > **Hackathon-ready enterprise-grade platform built for sub-second telemetry observation with zero raw data leaving the customer boundary.**
 
+🌐 **Live Production Deployment**: [https://third-eye-eta.vercel.app/](https://third-eye-eta.vercel.app/)  
+📦 **Live Embed Preview**: [https://third-eye-eta.vercel.app/?mode=embed](https://third-eye-eta.vercel.app/?mode=embed)  
+📜 **Universal Script**: `https://third-eye-eta.vercel.app/embed.js`
+
 ---
 
 ## 🏗️ Architecture
