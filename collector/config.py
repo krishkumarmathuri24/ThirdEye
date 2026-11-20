@@ -1,5 +1,25 @@
 import os
 
+def _load_dotenv():
+    env_paths = [
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env")
+    ]
+    for p in env_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            if k.strip() not in os.environ:
+                                os.environ[k.strip()] = v.strip().strip('"').strip("'")
+            except Exception:
+                pass
+
+_load_dotenv()
+
 class CollectorConfig:
     TENANT_ID: str = os.getenv("THIRDEYE_TENANT_ID", "tenant_prod_us_east_1")
     COLLECTOR_ID: str = os.getenv("THIRDEYE_COLLECTOR_ID", "collector_agent_node_alpha")
