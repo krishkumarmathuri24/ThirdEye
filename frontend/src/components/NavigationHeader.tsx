@@ -11,7 +11,8 @@ import {
   Wrench,
   Radio,
   Eye,
-  Globe
+  Globe,
+  Code2
 } from 'lucide-react';
 
 interface NavigationHeaderProps {
@@ -41,6 +42,7 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
     { id: 'scenarios', label: 'Scenario Injector', icon: PlayCircle },
     { id: 'copilot', label: 'AI Copilot', icon: MessageSquare },
     { id: 'audit', label: 'Audit Chain', icon: Activity },
+    { id: 'integrate', label: 'Connect Website', icon: Code2 },
     { id: 'landing', label: 'SaaS Overview', icon: Globe },
   ];
 

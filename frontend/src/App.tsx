@@ -11,6 +11,7 @@ import { InfrastructureCopilot } from './components/InfrastructureCopilot';
 import { AuditLogViewer } from './components/AuditLogViewer';
 import Demo from './components/ui/demo';
 import { ThirdEyeEmbedWidget } from './components/ThirdEyeEmbedWidget';
+import { WebsiteIntegrationHub } from './components/WebsiteIntegrationHub';
 
 import { TelemetryData, TrustScores, HealthState, SecurityState } from './types';
 import { api } from './services/api';
@@ -180,6 +181,10 @@ export default function App() {
 
         {activeTab === 'audit' && (
           <AuditLogViewer tenantId={tenantId} />
+        )}
+
+        {activeTab === 'integrate' && (
+          <WebsiteIntegrationHub tenantId={tenantId} />
         )}
       </main>
 
