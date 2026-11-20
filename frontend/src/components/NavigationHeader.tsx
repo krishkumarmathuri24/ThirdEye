@@ -1,5 +1,6 @@
 import React from 'react';
 import { Menu, Globe, Radio, ShieldCheck, LogOut } from 'lucide-react';
+import { TenantSwitcher } from './TenantSwitcher';
 
 interface NavigationHeaderProps {
   activeTab: string;
@@ -74,8 +75,11 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
         </div>
       </div>
 
-      {/* Right: Quick actions & SaaS overview link */}
+      {/* Right: Quick actions, Tenant Switcher & SaaS overview link */}
       <div className="flex items-center gap-3">
+        {/* Prominent Company / Datacenter Tenant Selector */}
+        <TenantSwitcher tenantId={tenantId} setTenantId={setTenantId} compact />
+
         {/* SaaS Landing Switcher Button */}
         <button
           onClick={() => setActiveTab('landing')}

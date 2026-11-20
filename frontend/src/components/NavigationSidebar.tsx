@@ -1,4 +1,5 @@
 import React from 'react';
+import { TenantSwitcher } from './TenantSwitcher';
 import {
   ShieldCheck,
   TrendingUp,
@@ -144,25 +145,7 @@ export const NavigationSidebar: React.FC<NavigationSidebarProps> = ({
 
         {/* Tenant Selector */}
         <div className="px-4 py-3 border-b border-slate-800/60">
-          <label className="text-[10px] uppercase font-mono text-slate-400 mb-1 block">Active Region Tenant</label>
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-800 bg-slate-900/80 text-xs text-slate-300">
-            <Globe className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <select
-              value={tenantId}
-              onChange={(e) => setTenantId(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-mono w-full"
-            >
-              <option value="tenant_prod_us_east_1" className="bg-slate-900 text-slate-200">
-                US-East (prod_01)
-              </option>
-              <option value="tenant_prod_eu_central_1" className="bg-slate-900 text-slate-200">
-                EU-Central (eu_02)
-              </option>
-              <option value="tenant_prod_ap_south_1" className="bg-slate-900 text-slate-200">
-                AP-South (apac_03)
-              </option>
-            </select>
-          </div>
+          <TenantSwitcher tenantId={tenantId} setTenantId={setTenantId} />
         </div>
 
         {/* Navigation Sections (Vertical Tabs) */}
