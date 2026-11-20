@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { LoginPage } from './components/LoginPage';
 import { NavigationSidebar } from './components/NavigationSidebar';
 import { NavigationHeader } from './components/NavigationHeader';
 import { TrustDashboard } from './components/TrustDashboard';
@@ -18,8 +19,80 @@ import { TelemetryData, TrustScores, HealthState, SecurityState } from './types'
 import { api } from './services/api';
 import { realtimeService } from './services/realtime';
 import { twilioService, TwilioAlertRecord } from './services/twilio';
+import { supabase } from './services/supabase';
+
+interface AuthUser {
+  name: string;
+  email: string;
+  avatar?: string;
+  method: string;
+}
 
 export default function App() {
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+
+  // Check existing Supabase session or cached demo login
+  useEffect(() => {
+    // 1. Check local demo session
+    const savedDemo = localStorage.getItem('thirdeye_demo_user');
+    if (savedDemo) {
+      try {
+        setAuthUser(JSON.parse(savedDemo));
+      } catch {
+        localStorage.removeItem('thirdeye_demo_user');
+      }
+    }
+
+    // 2. Check active Supabase session (Google OAuth or Phone OTP)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthUser({
+          name:
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split('@')[0] ||
+            session.user.phone ||
+            'User',
+          email: session.user.email || session.user.phone || '',
+          avatar: session.user.user_metadata?.avatar_url,
+          method: session.user.app_metadata?.provider || 'google',
+        });
+      }
+    });
+
+    // 3. Listen to auth state transitions
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAuthUser({
+          name:
+            session.user.user_metadata?.full_name ||
+            session.user.email?.split('@')[0] ||
+            session.user.phone ||
+            'User',
+          email: session.user.email || session.user.phone || '',
+          avatar: session.user.user_metadata?.avatar_url,
+          method: session.user.app_metadata?.provider || 'google',
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = (user: AuthUser) => {
+    setAuthUser(user);
+    if (user.method === 'demo') {
+      localStorage.setItem('thirdeye_demo_user', JSON.stringify(user));
+    }
+  };
+
+  const handleLogout = async () => {
+    localStorage.removeItem('thirdeye_demo_user');
+    await supabase.auth.signOut().catch(() => {});
+    setAuthUser(null);
+  };
+
   const queryParams = new URLSearchParams(window.location.search);
   const urlTenant = queryParams.get('tenant') || 'tenant_prod_us_east_1';
   const embedMode =
@@ -115,6 +188,11 @@ export default function App() {
     };
   }, [tenantId]);
 
+  // Show login page until authenticated
+  if (!authUser) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   // If embedded in external company website
   if (embedMode) {
     return (
@@ -128,13 +206,20 @@ export default function App() {
   if (activeTab === 'landing') {
     return (
       <div className="relative">
-        <div className="fixed top-20 right-6 z-50">
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-2">
           <button
             onClick={() => setActiveTab('trust')}
             className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-600 hover:to-cyan-600 text-white font-bold text-xs shadow-2xl hover:scale-105 active:scale-95 transition-all cursor-pointer flex items-center gap-2 border border-white/20"
           >
             <span>Launch Live Console</span>
             <span>→</span>
+          </button>
+          <button
+            onClick={handleLogout}
+            className="px-3 py-2.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 text-xs font-semibold shadow-xl transition-all cursor-pointer"
+            title="Sign out"
+          >
+            Sign Out
           </button>
         </div>
         <Demo onLaunchApp={() => setActiveTab('trust')} />
@@ -167,6 +252,8 @@ export default function App() {
           isConnected={isConnected}
           activeIncidentsCount={activeIncidentsCount}
           onToggleMobileMenu={() => setMobileOpen(!mobileOpen)}
+          authUser={authUser}
+          onLogout={handleLogout}
         />
 
         {/* Real-time Twilio Notification Alert Toast Banner */}

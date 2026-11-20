@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Globe, Radio, ShieldCheck } from 'lucide-react';
+import { Menu, Globe, Radio, ShieldCheck, LogOut } from 'lucide-react';
 
 interface NavigationHeaderProps {
   activeTab: string;
@@ -9,6 +9,8 @@ interface NavigationHeaderProps {
   isConnected: boolean;
   activeIncidentsCount: number;
   onToggleMobileMenu?: () => void;
+  authUser?: { name: string; email: string; avatar?: string; method: string } | null;
+  onLogout?: () => void;
 }
 
 export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
@@ -19,6 +21,8 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
   isConnected,
   activeIncidentsCount,
   onToggleMobileMenu,
+  authUser,
+  onLogout,
 }) => {
   const getTabTitle = (tab: string) => {
     switch (tab) {
@@ -92,6 +96,42 @@ export const NavigationHeader: React.FC<NavigationHeaderProps> = ({
             {isConnected ? 'EVENT-DRIVEN (<1s)' : 'CONNECTING...'}
           </span>
         </div>
+
+        {/* User profile & Logout */}
+        {authUser && (
+          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+            <div className="flex items-center gap-2">
+              {authUser.avatar && authUser.avatar.startsWith('http') ? (
+                <img
+                  src={authUser.avatar}
+                  alt={authUser.name}
+                  className="w-7 h-7 rounded-full border border-indigo-400/40 object-cover"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-indigo-600 to-cyan-500 text-white flex items-center justify-center text-xs font-bold shadow">
+                  {authUser.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className="hidden xl:block text-left">
+                <div className="text-xs font-semibold text-slate-200 truncate max-w-[110px]">
+                  {authUser.name}
+                </div>
+                <div className="text-[10px] text-slate-400 capitalize">
+                  {authUser.method}
+                </div>
+              </div>
+            </div>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                title="Sign out"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </header>
   );
