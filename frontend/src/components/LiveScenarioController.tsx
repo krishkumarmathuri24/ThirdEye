@@ -13,6 +13,8 @@ import {
   Bell,
   RotateCcw,
   AlertTriangle,
+  Bug,
+  Loader2,
 } from 'lucide-react';
 import { api } from '../services/api';
 import { twilioService, TwilioAlertRecord } from '../services/twilio';
@@ -30,6 +32,10 @@ export const LiveScenarioController: React.FC<ScenarioProps> = ({ tenantId, onSc
   const [resetting, setResetting] = useState(false);
   const [alertsHistory, setAlertsHistory] = useState<TwilioAlertRecord[]>(twilioService.getHistory());
 
+  // Debug test state
+  const [debugLoading, setDebugLoading] = useState(false);
+  const [debugResult, setDebugResult] = useState<any>(null);
+
   useEffect(() => {
     // Subscribe to incoming Twilio alert records
     const unsub = twilioService.subscribe((alert) => {
@@ -37,6 +43,21 @@ export const LiveScenarioController: React.FC<ScenarioProps> = ({ tenantId, onSc
     });
     return unsub;
   }, []);
+
+  // Debug: call /api/debug-notify and show result on screen
+  const handleDebugTest = async () => {
+    setDebugLoading(true);
+    setDebugResult(null);
+    try {
+      const res = await fetch('/api/debug-notify');
+      const data = await res.json();
+      setDebugResult(data);
+    } catch (err: any) {
+      setDebugResult({ error: err.message, hint: 'Could not reach /api/debug-notify — Vercel may still be deploying.' });
+    } finally {
+      setDebugLoading(false);
+    }
+  };
 
   const scenarios = [
     {
@@ -148,6 +169,87 @@ export const LiveScenarioController: React.FC<ScenarioProps> = ({ tenantId, onSc
 
   return (
     <div className="space-y-6">
+
+      {/* ── WhatsApp Debug Test Panel ───────────────────────── */}
+      <div className="p-4 rounded-2xl border border-indigo-800/60 bg-indigo-950/30">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-2">
+            <Bug className="w-4 h-4 text-indigo-400" />
+            <span className="text-sm font-bold text-white">WhatsApp Notification Diagnostics</span>
+            <span className="text-[10px] font-mono text-indigo-300 bg-indigo-900/60 border border-indigo-700/50 px-2 py-0.5 rounded">
+              Checks credentials &amp; sends a live test ping
+            </span>
+          </div>
+          <button
+            onClick={handleDebugTest}
+            disabled={debugLoading}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all disabled:opacity-60 cursor-pointer shadow"
+          >
+            {debugLoading ? (
+              <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Testing...</>
+            ) : (
+              <><Zap className="w-3.5 h-3.5" /> Test WhatsApp Now</>
+            )}
+          </button>
+        </div>
+
+        {debugResult && (
+          <div className={`mt-3 p-3 rounded-xl border text-xs font-mono ${
+            debugResult.status === 'SUCCESS'
+              ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
+              : 'border-rose-500/40 bg-rose-950/40 text-rose-300'
+          }`}>
+            {/* Status */}
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`px-2 py-0.5 rounded font-bold uppercase text-[10px] ${
+                debugResult.status === 'SUCCESS' ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+              }`}>
+                {debugResult.status}
+              </span>
+              {debugResult.twilio_http_status && (
+                <span className="text-slate-400">HTTP {debugResult.twilio_http_status}</span>
+              )}
+            </div>
+
+            {/* Env check */}
+            <div className="mb-2 space-y-0.5 text-slate-300">
+              {Object.entries(debugResult.envCheck || {}).map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <span className="text-slate-500 w-44 shrink-0">{k}:</span>
+                  <span className={String(v).includes('MISSING') ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
+                    {String(v)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Fix hint — most important */}
+            {debugResult.fix_hint && (
+              <div className="mt-2 p-2 rounded-lg bg-amber-950/60 border border-amber-700/50 text-amber-300 font-bold">
+                !! FIX: {debugResult.fix_hint}
+              </div>
+            )}
+
+            {/* Raw Twilio error */}
+            {debugResult.twilio_response && (
+              <div className="mt-2">
+                <span className="text-slate-500">Twilio response: </span>
+                <span className="text-slate-200">
+                  {debugResult.twilio_response.message || debugResult.twilio_response.sid || JSON.stringify(debugResult.twilio_response)}
+                </span>
+                {debugResult.twilio_response.code && (
+                  <span className="ml-2 text-amber-400">(code: {debugResult.twilio_response.code})</span>
+                )}
+              </div>
+            )}
+
+            {debugResult.reason && (
+              <div className="mt-1 text-slate-400">{debugResult.reason}</div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* ── Active Scenario Banner ─────────────────────────── */}
       {activeScenario && (
         <div className="p-5 rounded-2xl border-2 border-rose-500/80 bg-rose-950/40 shadow-2xl backdrop-blur-md animate-pulse">
