@@ -63,7 +63,9 @@ module.exports = async function handler(req, res) {
     // Key fields to look at:
     whatsapp_to:   waTo,
     whatsapp_from: waFrom,
-    fix_hint: twilioRaw?.code === 63007
+    fix_hint: twilioRaw?.code === 63038
+      ? 'TWILIO LIMIT REACHED: You hit the free trial limit of 50 WhatsApp messages per day. Twilio will reset your quota in 24 hours, or you can add a new Twilio test account.'
+      : twilioRaw?.code === 63007
       ? 'SANDBOX JOIN: You must text "join <keyword>" to +14155238886 on WhatsApp first!'
       : twilioRaw?.code === 21608
       ? 'FROM number is not WhatsApp-capable. Check TWILIO_PHONE_NUMBER.'
